@@ -33,6 +33,12 @@
 
 #define HISTOGRAM_ITEM_COUNT	256
 
+#define MAPSIZE(mapsize, flen, fpos)	(				\
+						mapsize > flen - fpos ?	\
+							flen - fpos :	\
+							mapsize		\
+					)
+
 extern char *__progname;
 static __attribute__((noreturn)) void usage(void);
 
@@ -44,17 +50,29 @@ static __attribute__((noreturn)) void usage(void)
 
 int main(int argc, char **argv)
 {
-	int fd, ret;
-	off_t flen, idx;
+	int fd, ret, pagesize;
 	char *p;
+	off_t flen, fpos, idx, mapsize, maplength;
 	struct stat st;
 	double histogram[HISTOGRAM_ITEM_COUNT];
 	double entropy;
 
 	fd = -1;
 	flen = 0;
+	fpos = 0;
 	p = NULL;
 	ret = 1;
+
+	pagesize = (int)sysconf(_SC_PAGESIZE);
+	if(pagesize == -1)
+	{
+		warn("sysconf(_SC_PAGESIZE)");
+		mapsize = 4096 * 1024;
+	}
+	else
+	{
+		mapsize = pagesize * 1024;
+	}
 
 	if(argc != 2)
 	{
@@ -82,7 +100,8 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
-	p = mmap(NULL, (unsigned)flen, PROT_READ, MAP_PRIVATE, fd, 0);
+	maplength = MAPSIZE(mapsize, flen, fpos);
+	p = mmap(NULL, maplength, PROT_READ, MAP_PRIVATE, fd, fpos);
 	if(p == MAP_FAILED)
 	{
 		warn("mmap: %s", argv[1]);
@@ -90,12 +109,35 @@ int main(int argc, char **argv)
 	}
 
 	ret = 0;
-	idx = -1;
+	idx = 0;
 
-	while (++idx < flen)
+	while (fpos < flen)
 	{
-		uint8_t byte = (uint8_t)(p[idx] & 0xff);
+		uint8_t byte = (uint8_t)(p[idx++] & 0xff);
 		histogram[ byte ] += 1.0;
+		fpos++;
+
+		if(idx >= maplength)
+		{
+			munmap(p, maplength);
+			p = NULL;
+
+			if(fpos == flen)
+			{
+				break;
+			}
+
+			maplength = MAPSIZE(mapsize, flen, fpos);
+			p = mmap(NULL, maplength, PROT_READ, MAP_PRIVATE, fd, fpos);
+
+			if(p == MAP_FAILED)
+			{
+				warn("mmap: %s", argv[1]);
+				goto out;
+			}
+
+			idx = 0;
+		}
 	}
 
 	entropy = 0.0;
