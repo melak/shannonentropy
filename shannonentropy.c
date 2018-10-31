@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 	char *p;
 	off_t flen, fpos, idx, mapsize, maplength;
 	struct stat st;
-	double histogram[HISTOGRAM_ITEM_COUNT];
+	size_t histogram[HISTOGRAM_ITEM_COUNT];
 	double entropy;
 
 	fd = -1;
@@ -67,12 +67,10 @@ int main(int argc, char **argv)
 	if(pagesize == -1)
 	{
 		warn("sysconf(_SC_PAGESIZE)");
-		mapsize = 4096 * 1024;
+		pagesize = 4096;
 	}
-	else
-	{
-		mapsize = pagesize * 1024;
-	}
+
+	mapsize = pagesize * 1024;
 
 	if(argc != 2)
 	{
@@ -114,7 +112,7 @@ int main(int argc, char **argv)
 	while (fpos < flen)
 	{
 		uint8_t byte = (uint8_t)(p[idx++] & 0xff);
-		histogram[ byte ] += 1.0;
+		histogram[ byte ]++;
 		fpos++;
 
 		if(idx >= maplength)
@@ -145,8 +143,8 @@ int main(int argc, char **argv)
 	{
 		if(histogram[idx] > 0)
 		{
-			entropy -= (histogram[idx] / flen) *
-				    log2(histogram[idx] / flen);
+			entropy -= ((double)histogram[idx] / flen) *
+				    log2((double)histogram[idx] / flen);
 		}
 	}
 
