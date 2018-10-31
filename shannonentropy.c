@@ -31,6 +31,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#if !defined(MADV_CORE)
+#define MADV_CORE		MADV_DODUMP
+#endif
+
 #define HISTOGRAM_ITEM_COUNT	256
 
 #define MAPSIZE(mapsize, flen, fpos)	(				\
@@ -105,6 +109,7 @@ int main(int argc, char **argv)
 		warn("mmap: %s", argv[1]);
 		goto out;
 	}
+	madvise(p, maplength, MADV_SEQUENTIAL | MADV_WILLNEED | MADV_CORE);
 
 	ret = 0;
 	idx = 0;
@@ -127,12 +132,12 @@ int main(int argc, char **argv)
 
 			maplength = MAPSIZE(mapsize, flen, fpos);
 			p = mmap(NULL, maplength, PROT_READ, MAP_PRIVATE, fd, fpos);
-
 			if(p == MAP_FAILED)
 			{
 				warn("mmap: %s", argv[1]);
 				goto out;
 			}
+			madvise(p, maplength, MADV_SEQUENTIAL | MADV_WILLNEED | MADV_CORE);
 
 			idx = 0;
 		}
